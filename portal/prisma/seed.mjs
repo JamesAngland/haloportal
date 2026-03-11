@@ -265,6 +265,91 @@ async function main() {
     update: { portalUserId: user.id },
     create: { assetId: a1.id, portalUserId: user.id, source: "sync" }
   });
+
+  // Seed license vendors and sample SKUs for demo matrix
+  const vendorsData = [
+    { name: "microsoft", label: "Microsoft 365" },
+    { name: "google", label: "Google Workspace" },
+    { name: "dropbox", label: "Dropbox" },
+    { name: "box", label: "Box" },
+    { name: "adobe", label: "Adobe" }
+  ];
+
+  const vendors = {};
+  for (const v of vendorsData) {
+    // eslint-disable-next-line no-await-in-loop
+    vendors[v.name] = await db.licenseVendor.upsert({
+      where: { name: v.name },
+      update: { label: v.label },
+      create: { name: v.name, label: v.label }
+    });
+  }
+
+  const definitions = [
+    // Microsoft
+    { vendor: "microsoft", code: "M365_BUSINESS_STANDARD", name: "M365 Business Standard" },
+    { vendor: "microsoft", code: "M365_E3", name: "M365 E3" },
+    { vendor: "microsoft", code: "M365_E5", name: "M365 E5" },
+    // Google
+    { vendor: "google", code: "GW_BUSINESS_STARTER", name: "Business Starter" },
+    { vendor: "google", code: "GW_BUSINESS_STANDARD", name: "Business Standard" },
+    // Dropbox
+    { vendor: "dropbox", code: "DBX_STANDARD", name: "Standard" },
+    { vendor: "dropbox", code: "DBX_ADVANCED", name: "Advanced" },
+    // Box
+    { vendor: "box", code: "BOX_BUSINESS", name: "Business" },
+    { vendor: "box", code: "BOX_BUSINESS_PLUS", name: "Business Plus" },
+    // Adobe
+    { vendor: "adobe", code: "ADOBE_CC_ALL_APPS", name: "Creative Cloud All Apps" },
+    { vendor: "adobe", code: "ADOBE_ACROBAT_PRO", name: "Acrobat Pro" }
+  ];
+
+  const licenseDefsByCode = {};
+  for (const def of definitions) {
+    const vendor = vendors[def.vendor];
+    if (!vendor) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const created = await db.licenseDefinition.upsert({
+      where: {
+        vendorId_code: {
+          vendorId: vendor.id,
+          code: def.code
+        }
+      },
+      update: { name: def.name },
+      create: {
+        vendorId: vendor.id,
+        code: def.code,
+        name: def.name
+      }
+    });
+    licenseDefsByCode[def.code] = created;
+  }
+
+  // Give the example user a couple of licenses for demo purposes
+  const exampleLicenses = [
+    "M365_BUSINESS_STANDARD",
+    "GW_BUSINESS_STARTER",
+    "ADOBE_CC_ALL_APPS"
+  ];
+  for (const code of exampleLicenses) {
+    const lic = licenseDefsByCode[code];
+    if (!lic) continue;
+    // eslint-disable-next-line no-await-in-loop
+    await db.licenseAssignment.upsert({
+      where: {
+        userId_licenseId: {
+          userId: user.id,
+          licenseId: lic.id
+        }
+      },
+      update: {},
+      create: {
+        userId: user.id,
+        licenseId: lic.id
+      }
+    });
+  }
 }
 
 main()

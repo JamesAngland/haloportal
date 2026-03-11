@@ -11,10 +11,29 @@ type User = {
   createdAt: string;
 };
 
+type LicenseVendor = {
+  id: string;
+  name: string;
+  label: string;
+  licenses: { id: string; name: string; code: string }[];
+};
+
+type LicenseAssignment = {
+  userId: string;
+  licenseId: string;
+};
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [view, setView] = useState<"users" | "licenses">("users");
+
+  const [vendors, setVendors] = useState<LicenseVendor[]>([]);
+  const [assignments, setAssignments] = useState<LicenseAssignment[]>([]);
+  const [licensesLoading, setLicensesLoading] = useState(false);
+  const [activeVendor, setActiveVendor] = useState<string | null>(null);
 
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
@@ -44,6 +63,40 @@ export default function AdminUsersPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function loadLicenses() {
+    setLicensesLoading(true);
+    setError(null);
+    try {
+      const [defsRes, asgRes] = await Promise.all([
+        fetch("/api/admin/licenses/definitions"),
+        fetch("/api/admin/licenses/assignments")
+      ]);
+      const defsData = (await defsRes.json()) as {
+        vendors?: LicenseVendor[];
+        error?: string;
+      };
+      const asgData = (await asgRes.json()) as {
+        assignments?: LicenseAssignment[];
+        error?: string;
+      };
+      if (!defsRes.ok || !defsData.vendors) {
+        throw new Error(defsData.error ?? "Failed to load license definitions");
+      }
+      if (!asgRes.ok || !asgData.assignments) {
+        throw new Error(asgData.error ?? "Failed to load license assignments");
+      }
+      setVendors(defsData.vendors);
+      setAssignments(asgData.assignments);
+      if (!activeVendor && defsData.vendors.length > 0) {
+        setActiveVendor(defsData.vendors[0].name);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load licenses");
+    } finally {
+      setLicensesLoading(false);
+    }
+  }
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
@@ -122,12 +175,49 @@ export default function AdminUsersPage() {
             Manage users for this client and set permission levels.
           </p>
         </div>
-        <Link href="/devices" style={{ opacity: 0.9 }}>
-          ← Back to portal
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setView("users")}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: 0,
+              cursor: "pointer",
+              background: view === "users" ? "#2b62ff" : "rgba(255,255,255,0.08)",
+              color: "white",
+              fontWeight: 600,
+              fontSize: 13
+            }}
+          >
+            Users
+          </button>
+          <button
+            onClick={() => {
+              setView("licenses");
+              if (vendors.length === 0) void loadLicenses();
+            }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: 0,
+              cursor: "pointer",
+              background: view === "licenses" ? "#2b62ff" : "rgba(255,255,255,0.08)",
+              color: "white",
+              fontWeight: 600,
+              fontSize: 13
+            }}
+          >
+            Licenses matrix
+          </button>
+          <Link href="/devices" style={{ opacity: 0.9 }}>
+            ← Back to portal
+          </Link>
+        </div>
       </div>
 
-      <section
+      {view === "users" && (
+        <>
+          <section
         style={{
           marginBottom: 20,
           padding: 16,
@@ -209,102 +299,309 @@ export default function AdminUsersPage() {
             Add
           </button>
         </form>
-      </section>
+          </section>
 
-      {error ? (
-        <div
-          style={{
-            marginBottom: 12,
-            background: "rgba(255,68,68,0.12)",
-            border: "1px solid rgba(255,68,68,0.2)",
-            padding: "8px 10px",
-            borderRadius: 10
-          }}
-        >
-          {error}
-        </div>
-      ) : null}
-
-      <section
-        style={{
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          overflow: "hidden"
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr 1fr 140px",
-            padding: "8px 12px",
-            background: "rgba(255,255,255,0.04)",
-            fontSize: 13,
-            opacity: 0.9
-          }}
-        >
-          <div>Email</div>
-          <div>Name</div>
-          <div>Role</div>
-          <div>Actions</div>
-        </div>
-        {loading ? (
-          <div style={{ padding: 12 }}>Loading…</div>
-        ) : users.length === 0 ? (
-          <div style={{ padding: 12, opacity: 0.9 }}>No users for this client yet.</div>
-        ) : (
-          users.map((u) => (
+          {error ? (
             <div
-              key={u.id}
+              style={{
+                marginBottom: 12,
+                background: "rgba(255,68,68,0.12)",
+                border: "1px solid rgba(255,68,68,0.2)",
+                padding: "8px 10px",
+                borderRadius: 10
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          <section
+            style={{
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.08)",
+              overflow: "hidden"
+            }}
+          >
+            <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "2fr 1fr 1fr 140px",
-                padding: "10px 12px",
-                borderTop: "1px solid rgba(255,255,255,0.06)"
+                padding: "8px 12px",
+                background: "rgba(255,255,255,0.04)",
+                fontSize: 13,
+                opacity: 0.9
               }}
             >
-              <div>{u.email}</div>
-              <div>{u.name ?? "—"}</div>
-              <div>
-                <select
-                  value={u.role}
-                  onChange={(e) =>
-                    updateRole(u.id, e.target.value as "user" | "admin" | "manager")
-                  }
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    background: "rgba(0,0,0,0.25)",
-                    color: "white",
-                    fontSize: 12
-                  }}
-                >
-                  <option value="user">user</option>
-                  <option value="manager">manager</option>
-                  <option value="admin">admin</option>
-                </select>
-              </div>
-              <div>
-                <button
-                  onClick={() => deleteUser(u.id)}
-                  style={{
-                    background: "rgba(255,255,255,0.08)",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    padding: "6px 10px",
-                    borderRadius: 10,
-                    color: "white",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer"
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
+              <div>Email</div>
+              <div>Name</div>
+              <div>Role</div>
+              <div>Actions</div>
             </div>
-          ))
-        )}
-      </section>
+            {loading ? (
+              <div style={{ padding: 12 }}>Loading…</div>
+            ) : users.length === 0 ? (
+              <div style={{ padding: 12, opacity: 0.9 }}>
+                No users for this client yet.
+              </div>
+            ) : (
+              users.map((u) => (
+                <div
+                  key={u.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 1fr 1fr 140px",
+                    padding: "10px 12px",
+                    borderTop: "1px solid rgba(255,255,255,0.06)"
+                  }}
+                >
+                  <div>{u.email}</div>
+                  <div>{u.name ?? "—"}</div>
+                  <div>
+                    <select
+                      value={u.role}
+                      onChange={(e) =>
+                        updateRole(u.id, e.target.value as "user" | "admin" | "manager")
+                      }
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        background: "rgba(0,0,0,0.25)",
+                        color: "white",
+                        fontSize: 12
+                      }}
+                    >
+                      <option value="user">user</option>
+                      <option value="manager">manager</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => deleteUser(u.id)}
+                      style={{
+                        background: "rgba(255,255,255,0.08)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        color: "white",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
+        </>
+      )}
+
+      {view === "licenses" && (
+        <section
+          style={{
+            marginTop: 8,
+            padding: 16,
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.04)"
+          }}
+        >
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+            Licenses matrix
+          </h2>
+          {error ? (
+            <div
+              style={{
+                marginBottom: 12,
+                background: "rgba(255,68,68,0.12)",
+                border: "1px solid rgba(255,68,68,0.2)",
+                padding: "8px 10px",
+                borderRadius: 10
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          <div style={{ marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {vendors.map((v) => (
+              <button
+                key={v.id}
+                onClick={() => setActiveVendor(v.name)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: 0,
+                  cursor: "pointer",
+                  background:
+                    activeVendor === v.name ? "#2b62ff" : "rgba(255,255,255,0.08)",
+                  color: "white",
+                  fontSize: 12,
+                  fontWeight: 600
+                }}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          {licensesLoading ? (
+            <div>Loading licenses…</div>
+          ) : !activeVendor || vendors.length === 0 ? (
+            <div style={{ opacity: 0.9 }}>No license definitions configured yet.</div>
+          ) : (
+            (() => {
+              const vendor = vendors.find((v) => v.name === activeVendor);
+              if (!vendor) {
+                return <div style={{ opacity: 0.9 }}>No licenses for this vendor.</div>;
+              }
+              if (vendor.licenses.length === 0) {
+                return (
+                  <div style={{ opacity: 0.9 }}>
+                    No license SKUs defined for {vendor.label}.
+                  </div>
+                );
+              }
+
+              const hasAssignment = (userId: string, licId: string) =>
+                assignments.some(
+                  (a) => a.userId === userId && a.licenseId === licId
+                );
+
+              const toggleAssignment = async (userId: string, licId: string, next: boolean) => {
+                try {
+                  const url = next
+                    ? "/api/admin/licenses/assign"
+                    : "/api/admin/licenses/unassign";
+                  const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ userId, licenseId: licId })
+                  });
+                  const data = (await res.json()) as { ok?: boolean; error?: string };
+                  if (!res.ok || !data.ok) {
+                    throw new Error(data.error ?? "Failed to update license");
+                  }
+                  setAssignments((prev) =>
+                    next
+                      ? [...prev, { userId, licenseId: licId }]
+                      : prev.filter(
+                          (a) => !(a.userId === userId && a.licenseId === licId)
+                        )
+                  );
+                } catch (err) {
+                  setError(
+                    err instanceof Error ? err.message : "Failed to update license"
+                  );
+                }
+              };
+
+              return (
+                <div
+                  style={{
+                    overflowX: "auto",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.08)"
+                  }}
+                >
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      minWidth: 600
+                    }}
+                  >
+                    <thead>
+                      <tr
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          fontSize: 13
+                        }}
+                      >
+                        <th
+                          style={{
+                            textAlign: "left",
+                            padding: "8px 10px",
+                            borderBottom: "1px solid rgba(255,255,255,0.1)"
+                          }}
+                        >
+                          User
+                        </th>
+                        {vendor.licenses.map((lic) => (
+                          <th
+                            key={lic.id}
+                            style={{
+                              textAlign: "center",
+                              padding: "8px 10px",
+                              borderBottom: "1px solid rgba(255,255,255,0.1)"
+                            }}
+                          >
+                            <div>{lic.name}</div>
+                            <div style={{ fontSize: 11, opacity: 0.7 }}>{lic.code}</div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={1 + vendor.licenses.length}
+                            style={{ padding: "10px 12px", opacity: 0.9 }}
+                          >
+                            No users for this client yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        users.map((u) => (
+                          <tr key={u.id}>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                borderTop: "1px solid rgba(255,255,255,0.06)"
+                              }}
+                            >
+                              <div>{u.email}</div>
+                              <div style={{ fontSize: 11, opacity: 0.7 }}>
+                                {u.name ?? "—"}
+                              </div>
+                            </td>
+                            {vendor.licenses.map((lic) => {
+                              const checked = hasAssignment(u.id, lic.id);
+                              return (
+                                <td
+                                  key={lic.id}
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px 10px",
+                                    borderTop: "1px solid rgba(255,255,255,0.06)"
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      void toggleAssignment(u.id, lic.id, e.target.checked)
+                                    }
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()
+          )}
+        </section>
+      )}
     </main>
   );
 }

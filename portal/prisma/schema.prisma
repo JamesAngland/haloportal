@@ -116,3 +116,46 @@ model OsLifecycle {
   @@map("os_lifecycle")
 }
 
+model LicenseVendor {
+  id       String              @id @default(cuid())
+  name     String              // "microsoft" | "google" | "dropbox" | "box" | "adobe"
+  label    String
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+
+  licenses LicenseDefinition[]
+
+  @@unique([name])
+  @@map("license_vendors")
+}
+
+model LicenseDefinition {
+  id        String           @id @default(cuid())
+  vendorId  String           @map("vendor_id")
+  name      String
+  code      String
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  vendor     LicenseVendor   @relation(fields: [vendorId], references: [id])
+  assignments LicenseAssignment[]
+
+  @@unique([vendorId, code])
+  @@map("license_definitions")
+}
+
+model LicenseAssignment {
+  id        String          @id @default(cuid())
+  userId    String          @map("user_id")
+  licenseId String          @map("license_id")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  user    PortalUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  license LicenseDefinition @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, licenseId])
+  @@index([userId])
+  @@index([licenseId])
+  @@map("license_assignments")
+}
+
