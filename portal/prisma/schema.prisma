@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PortalUserRole {
+  user
+  admin
+  manager
+}
+
+enum AssetAssignmentSource {
+  user_claim
+  admin
+  sync
+}
+
+model Client {
+  id             String      @id @default(cuid())
+  name           String
+  haloCustomerId String?     @map("halo_customer_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  users  PortalUser[]
+  assets HaloAsset[]
+
+  @@map("clients")
+}
+
+model PortalUser {
+  id           String         @id @default(cuid())
+  clientId     String         @map("client_id")
+  email        String
+  name         String?
+  role         PortalUserRole @default(user)
+  passwordHash String?        @map("password_hash")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  client           Client             @relation(fields: [clientId], references: [id])
+  assetAssignments AssetAssignment[]
+
+  @@unique([clientId, email])
+  @@index([clientId])
+  @@map("portal_users")
+}
+
+model HaloAsset {
+  id           String   @id @default(cuid())
+  clientId     String   @map("client_id")
+  haloAssetId  String   @unique @map("halo_asset_id")
+  name         String?
+  serialNumber String?  @map("serial_number")
+  assetType    String?  @map("asset_type")
+  osName       String?  @map("os_name")
+  purchaseDate DateTime? @map("purchase_date")
+  inServiceDate DateTime? @map("in_service_date")
+  raw          Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  client      Client           @relation(fields: [clientId], references: [id])
+  assignment  AssetAssignment?
+
+  @@index([clientId])
+  @@index([clientId, serialNumber])
+  @@map("halo_assets")
+}
+
+model AssetAssignment {
+  id           String               @id @default(cuid())
+  assetId      String               @unique @map("asset_id")
+  portalUserId String               @map("portal_user_id")
+  assignedAt   DateTime             @default(now()) @map("assigned_at")
+  source       AssetAssignmentSource @default(user_claim)
+
+  asset      HaloAsset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  portalUser PortalUser @relation(fields: [portalUserId], references: [id], onDelete: Cascade)
+
+  @@index([portalUserId])
+  @@map("asset_assignments")
+}
+
+enum OsVendor {
+  windows
+  macos
+  ubuntu
+  debian
+  other
+}
+
+enum SupportPhase {
+  mainstream
+  extended
+  eol
+}
+
+model OsLifecycle {
+  id           String       @id @default(cuid())
+  vendor       OsVendor
+  family       String
+  version      String?
+  eolDate      DateTime     @map("eol_date")
+  supportPhase SupportPhase @default(mainstream) @map("support_phase")
+  sourceUrl    String?      @map("source_url")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@unique([vendor, family, version])
+  @@index([vendor, family])
+  @@map("os_lifecycle")
+}
+
