@@ -17,10 +17,31 @@ export async function POST(req: Request) {
   }
 
   const email = parsed.data.email.toLowerCase();
-  const user = await db.portalUser.findFirst({
+  let user = await db.portalUser.findFirst({
     where: { email },
     include: { client: true }
   });
+
+  // Optional: allow first-time signups without seed when ALLOW_AUTO_SIGNUP=true
+  if (!user && process.env.ALLOW_AUTO_SIGNUP === "true") {
+    const client =
+      (await db.client.findFirst()) ??
+      (await db.client.create({
+        data: { name: "Example Co" }
+      }));
+
+    const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+    user = await db.portalUser.create({
+      data: {
+        clientId: client.id,
+        email,
+        name: email.split("@")[0],
+        role: "user",
+        passwordHash
+      },
+      include: { client: true }
+    });
+  }
 
   if (!user?.passwordHash) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
