@@ -65,3 +65,11 @@ export async function requireSession() {
   return session;
 }
 
+export async function requireAdminSession() {
+  const session = await requireSession();
+  if (session.role !== "admin" && session.role !== "manager") {
+    throw new Error("FORBIDDEN");
+  }
+  return session;
+}
+
