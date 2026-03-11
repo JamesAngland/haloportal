@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
-import { Prisma } from "@prisma/client";
 
 const schema = z.object({
   assetId: z.string().min(1)
@@ -33,8 +32,11 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     // The unique constraint on assetId enforces "only if not assigned to another user".
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return NextResponse.json({ error: "That device is already assigned to another user." }, { status: 409 });
+    if ((err as any)?.code === "P2002") {
+      return NextResponse.json(
+        { error: "That device is already assigned to another user." },
+        { status: 409 }
+      );
     }
     throw err;
   }
